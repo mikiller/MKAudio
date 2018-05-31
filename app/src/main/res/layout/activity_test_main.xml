@@ -39,7 +39,15 @@
         android:id="@+id/fl_wave"
         android:layout_width="match_parent"
         android:layout_height="200dp"
-        android:layout_below="@+id/ll_opt"/>
+        android:layout_below="@+id/ll_opt">
+
+        <com.smg.audioeditor.widgets.AudioProgress
+            android:id="@+id/pgs_audio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:visibility="invisible"/>
+    </FrameLayout>
 
     <TextView
         android:id="@+id/tv_dirPath"

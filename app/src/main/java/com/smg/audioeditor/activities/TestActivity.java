@@ -2,6 +2,7 @@ package com.smg.audioeditor.activities;
 
 import android.media.AudioFormat;
 import android.media.MediaPlayer;
+import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.Nullable;
@@ -17,6 +18,7 @@ import com.smg.audioeditor.R;
 import com.smg.audioeditor.adapters.FileRcvAdapter;
 import com.smg.audioeditor.base.BaseActivity;
 import com.smg.audioeditor.utils.AudioUtils;
+import com.smg.audioeditor.widgets.AudioProgress;
 import com.uilib.utils.ToastUtils;
 
 import java.io.File;
@@ -27,6 +29,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.Executors;
 
 import butterknife.BindView;
@@ -49,12 +53,17 @@ public class TestActivity extends BaseActivity {
     TextView tv_dirPath;
     @BindView(R.id.rcv_file)
     RecyclerView rcv_file;
+    @BindView(R.id.pgs_audio)
+    AudioProgress pgs_audio;
 
     FileRcvAdapter adapter;
     AudioUtils audioUtils;
     String dirPath;
 
     MediaPlayer player;
+    Visualizer visualizer;
+    Visualizer.OnDataCaptureListener captureListener;
+    Timer timer;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -81,13 +90,15 @@ public class TestActivity extends BaseActivity {
         adapter.setItemClickListener(new FileRcvAdapter.onItemClickListener() {
             @Override
             public void onItemClick(File file) {
+
                 if(player != null && !player.isPlaying())
                     try {
                         player.setDataSource(file.getAbsolutePath());
                         player.prepare();
                         tv_dirPath.setText(dirPath + file.getName());
-                        //player.start();
                     } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (IllegalStateException e){
                         e.printStackTrace();
                     }
 
@@ -139,8 +150,22 @@ public class TestActivity extends BaseActivity {
         btn_play.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(player != null)
+                if(player != null) {
                     player.start();
+                    visualizer.setEnabled(true);
+                    timer = new Timer();
+                    timer.schedule(new TimerTask() {
+                        @Override
+                        public void run() {
+                            pgs_audio.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    pgs_audio.updateCTime(player.getCurrentPosition());
+                                }
+                            });
+                        }
+                    }, 0l, 1000l);
+                }
             }
         });
 
@@ -164,12 +189,42 @@ public class TestActivity extends BaseActivity {
         });
 
         player = new MediaPlayer();
+        player.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+            @Override
+            public void onPrepared(MediaPlayer mp) {
+                if(pgs_audio != null && pgs_audio.getVisibility() != View.VISIBLE)
+                    pgs_audio.setVisibility(View.VISIBLE);
+                pgs_audio.setTv_duration(mp.getDuration());
+                pgs_audio.updateCTime(mp.getCurrentPosition());
+
+                visualizer = new Visualizer(mp.getAudioSessionId());
+                visualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[1]);
+                visualizer.setDataCaptureListener(captureListener, Visualizer.getMaxCaptureRate()/2, true, true);
+            }
+        });
         player.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mp) {
+                timer.cancel();
+                visualizer.setEnabled(false);
                 tv_dirPath.setText(dirPath);
+                pgs_audio.setVisibility(View.INVISIBLE);
+                player.reset();
             }
         });
+
+        captureListener = new Visualizer.OnDataCaptureListener() {
+            @Override
+            public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
+                String wave = new String(waveform);
+                Log.e(TAG, "wave: " + wave);
+            }
+
+            @Override
+            public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) {
+
+            }
+        };
     }
 
     @Override
