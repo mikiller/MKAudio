@@ -51,7 +51,8 @@ public class AudioUtils {
         if (audioBufSize == AudioRecord.ERROR_BAD_VALUE) {
             Log.e(TAG, "audio param is wrong");
             return;
-        }
+        }else
+            Log.e(TAG, "buf size: " + audioBufSize);
         audioRecord = new AudioRecord(AUDIOSOURCE, SAMPLERATE, channelConfig, audioFormat, audioBufSize);
         if (audioRecord.getState() == AudioRecord.STATE_UNINITIALIZED) {
             Log.e(TAG, "init audio failed");
@@ -62,18 +63,18 @@ public class AudioUtils {
 
     public byte[] getAudioData() {
         if (audioBuf == null) {
-            audioBuf = ByteBuffer.allocate(2048 * audioRecord.getChannelCount());
+            audioBuf = ByteBuffer.allocate(audioBufSize * audioRecord.getChannelCount());
         } else {
             audioBuf.clear();
         }
         if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
-            int ret = audioRecord.read(audioBuf.array(), 0, 2048 * audioRecord.getChannelCount());
+            int ret = audioRecord.read(audioBuf.array(), 0, audioBufSize * audioRecord.getChannelCount());
             if (ret < 0) {
                 Log.e(TAG, "get audio failed");
             }
         } else {
             if (tmp == null)
-                tmp = new byte[2048 * audioRecord.getChannelCount()];
+                tmp = new byte[audioBufSize * audioRecord.getChannelCount()];
             audioBuf.put(tmp);
         }
         return audioBuf.array();
@@ -180,6 +181,8 @@ public class AudioUtils {
                     byte[] buffer = getAudioData();
                     try {
                         fos.write(buffer);
+                        if(recordListener != null)
+                            recordListener.onRecording(buffer);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -286,6 +289,7 @@ public class AudioUtils {
     }
 
     public interface onRecordStateListener{
+        void onRecording(byte[] audioBuf);
         void onRecordStop(File rstFile);
     }
 }

@@ -21,33 +21,49 @@
             android:layout_height="wrap_content"
             android:text="播放"/>
 
-        <ImageButton
-            android:id="@+id/btn_switch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@android:drawable/ic_media_play"/>
+        <!--<ImageButton-->
+            <!--android:id="@+id/btn_switch"-->
+            <!--android:layout_width="wrap_content"-->
+            <!--android:layout_height="wrap_content"-->
+            <!--android:src="@android:drawable/ic_media_play"/>-->
 
-        <ImageButton
-            android:id="@+id/btn_stop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@drawable/shape_stop"
-            android:padding="18dp" />
+        <!--<ImageButton-->
+            <!--android:id="@+id/btn_stop"-->
+            <!--android:layout_width="wrap_content"-->
+            <!--android:layout_height="wrap_content"-->
+            <!--android:src="@drawable/shape_stop"-->
+            <!--android:padding="18dp" />-->
     </LinearLayout>
 
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/fl_wave"
         android:layout_width="match_parent"
-        android:layout_height="200dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
         android:layout_below="@+id/ll_opt">
+
+        <com.cokus.wavelibrary.view.WaveSurfaceView
+            android:id="@+id/waveSfView"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"/>
+
+        <com.cokus.wavelibrary.view.WavaTimeView
+            android:id="@+id/waveView"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_marginTop="5dp"/>
 
         <com.smg.audioeditor.widgets.AudioProgress
             android:id="@+id/pgs_audio"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
-            android:visibility="invisible"/>
-    </FrameLayout>
+            android:visibility="visible"/>
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tv_dirPath"

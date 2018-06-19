@@ -59,4 +59,5 @@ dependencies {
     annotationProcessor 'com.jakewharton:butterknife-compiler:8.7.0'
     compile project(':mk_uilib')
     implementation project(':mkokhttp')
+    implementation project(':wavelibrary')
 }
