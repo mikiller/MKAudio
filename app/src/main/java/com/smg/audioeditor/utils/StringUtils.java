@@ -1,6 +1,7 @@
 package com.smg.audioeditor.utils;
 
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -40,5 +41,12 @@ public class StringUtils {
 
     public static String getDateStr(long timeStamp){
         return getDateStr("MM月dd日 HH:mm", timeStamp);
+    }
+
+    public static String getMillisToStr(long duration){
+        int tmp = (int) (duration % 1000l) + 1000;
+        String millis = String.valueOf(tmp).substring(1, 4);
+        String time = DateUtils.formatElapsedTime(duration/1000);
+        return String.format("%1$s:%2$s", time, millis);
     }
 }

@@ -12,6 +12,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ShortBuffer;
 import java.util.concurrent.Executors;
 
 /**
@@ -25,8 +26,9 @@ public class AudioUtils {
     final int SAMPLERATE = 44100;
     AudioRecord audioRecord;
     int audioBufSize = 0;
-    byte[] tmp;
-    ByteBuffer audioBuf;
+    short[] tmp;
+//    ByteBuffer audioBuf;
+    ShortBuffer audioBuf;
     private RecordRunnable recordRunnable;
     private onRecordStateListener recordListener;
     private int recordState = RECORD_STATE_NONE;
@@ -51,8 +53,7 @@ public class AudioUtils {
         if (audioBufSize == AudioRecord.ERROR_BAD_VALUE) {
             Log.e(TAG, "audio param is wrong");
             return;
-        }else
-            Log.e(TAG, "buf size: " + audioBufSize);
+        }
         audioRecord = new AudioRecord(AUDIOSOURCE, SAMPLERATE, channelConfig, audioFormat, audioBufSize);
         if (audioRecord.getState() == AudioRecord.STATE_UNINITIALIZED) {
             Log.e(TAG, "init audio failed");
@@ -62,22 +63,41 @@ public class AudioUtils {
     }
 
     public byte[] getAudioData() {
+        int readSize = 0;
         if (audioBuf == null) {
-            audioBuf = ByteBuffer.allocate(audioBufSize * audioRecord.getChannelCount());
+//            audioBuf = ByteBuffer.allocate(audioBufSize * audioRecord.getChannelCount());
+            audioBuf = ShortBuffer.allocate(audioBufSize * audioRecord.getChannelCount());
         } else {
             audioBuf.clear();
         }
         if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
-            int ret = audioRecord.read(audioBuf.array(), 0, audioBufSize * audioRecord.getChannelCount());
-            if (ret < 0) {
+            readSize = audioRecord.read(audioBuf.array(), 0, audioBufSize * audioRecord.getChannelCount());
+            if (readSize < 0) {
                 Log.e(TAG, "get audio failed");
             }
         } else {
             if (tmp == null)
-                tmp = new byte[audioBufSize * audioRecord.getChannelCount()];
+//                tmp = new byte[audioBufSize * audioRecord.getChannelCount()];
+                tmp = new short[audioBufSize * audioRecord.getChannelCount()];
             audioBuf.put(tmp);
         }
-        return audioBuf.array();
+        byte[] byts = new byte[readSize * 2];
+        for(int i = 0; i < readSize; i++){
+            byte[] b = getBytes(audioBuf.get(i));
+            byts[i * 2] = b[0];
+            byts[i * 2 + 1] = b[1];
+        }
+        return byts;
+//        return audioBuf.array();
+    }
+
+    public byte[] getBytes(short s) {
+        byte[] buf = new byte[2];
+        for (int i = 0; i < buf.length; i++) {
+            buf[i] = (byte) (s & 0x00ff);
+            s >>= 8;
+        }
+        return buf;
     }
 
     public void start() {
@@ -181,8 +201,9 @@ public class AudioUtils {
                     byte[] buffer = getAudioData();
                     try {
                         fos.write(buffer);
+                        fos.flush();
                         if(recordListener != null)
-                            recordListener.onRecording(buffer);
+                            recordListener.onRecording(audioBuf.array());
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -214,7 +235,7 @@ public class AudioUtils {
         FileOutputStream out = null;
         long totalAudioLen = 0;
         long totalDataLen = totalAudioLen + 36;
-        int channels = 2;
+        int channels = audioRecord.getChannelCount();
         long byteRate = 16 * channels / 8;
         byte[] data = new byte[audioBufSize];
         try {
@@ -289,7 +310,7 @@ public class AudioUtils {
     }
 
     public interface onRecordStateListener{
-        void onRecording(byte[] audioBuf);
+        void onRecording(short[] audioBuf);
         void onRecordStop(File rstFile);
     }
 }

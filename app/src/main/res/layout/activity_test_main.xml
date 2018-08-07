@@ -42,22 +42,30 @@
         android:orientation="vertical"
         android:layout_below="@+id/ll_opt">
 
-        <com.cokus.wavelibrary.view.WaveSurfaceView
-            android:id="@+id/waveSfView"
-            android:layout_width="match_parent"
-            android:layout_height="160dp"
-            android:layout_marginLeft="10dp"
-            android:layout_marginRight="10dp"/>
+        <!--<com.cokus.wavelibrary.view.WaveSurfaceView-->
+            <!--android:id="@+id/waveSfView"-->
+            <!--android:layout_width="match_parent"-->
+            <!--android:layout_height="160dp"-->
+            <!--android:layout_marginLeft="10dp"-->
+            <!--android:layout_marginRight="10dp"/>-->
 
         <com.cokus.wavelibrary.view.WavaTimeView
             android:id="@+id/waveView"
             android:layout_width="match_parent"
             android:layout_height="160dp"
-            android:layout_marginLeft="10dp"
-            android:layout_marginRight="10dp"
             android:layout_marginTop="5dp"/>
+        <TextView
+            android:id="@+id/tv_duration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="25sp"
+            android:textColor="@color/colorPrimary"
+            android:text="00:00:00:000"
+            android:gravity="center"
+            android:background="@android:color/white"
+            />
 
-        <com.smg.audioeditor.widgets.AudioProgress
+        <com.cokus.wavelibrary.view.AudioProgress
             android:id="@+id/pgs_audio"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

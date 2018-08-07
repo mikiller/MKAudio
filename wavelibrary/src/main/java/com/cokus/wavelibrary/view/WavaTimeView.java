@@ -6,33 +6,36 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.text.format.DateUtils;
 import android.util.AttributeSet;
-import android.util.Log;
+import android.util.TypedValue;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-
-/**
- * Created by chenzhuo on 2017/3/30.
- * 实时绘制波形视图  有之前surfaceview 改为 view
- * 原因很直接 surfaceview 解决不了刷新卡顿问题，最好的选择只有View了
- */
 
 public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback {
     private final int STATE_IDEL = -1, STATE_STOP = 0, STATE_START = 1, STATE_PAUSE = 2;
-    private ArrayList<Byte> audioBuf = new ArrayList<>();//绘制波形的音频数据
-    private int lineColor;//波形线的颜色
-    private int seekColor;//进度的颜色
-    private static final int draw_time = 10;//绘制时间间隔 单位毫秒
-    private int line_off = 32;//上下边距距离
-    private float startX = 0, oldX = 0;
+    private ArrayList<Short> audioBuf = new ArrayList<>();//绘制波形的音频数据
+    private int waveColor = Color.rgb(87, 146, 246);//波形线的颜色
+    private int seekColor = Color.rgb(246, 131, 126);//进度的颜色
+    private static final long draw_time = 40l;//绘制时间间隔 单位毫秒
+    private static final int maxTime = 6;//最大秒数
+    private static final int timeHeight = 60;//时间条高度
+    private static int timeWidth;//一格时间宽度
+    private static int tickCount = 15;//刻度数量
+    private boolean needTime = true;
+    private static float endPos;//指针固定位置
+    private int line_off = 16;//上下边距距离
+    private float cursorX = 0;//指针位置
+    private float oldX = 0;//上一帧位置
+    private float rateX = 0.25f;//绘制速率
     private Canvas canvas;
     private Paint paint;
     private int drawState = STATE_PAUSE;
     private DrawThread drawThread;
-
+    private long startTime = 0, deltTime = 0, passTime = 0;
+    private OnDrawingWaveListener drawingListener;
 
     public WavaTimeView(Context context) {
         this(context, null, 0);
@@ -56,18 +59,18 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
 
     @Override
     public void surfaceCreated(final SurfaceHolder holder) {
+        endPos = getMeasuredWidth() * endPos;
+        timeWidth = getMeasuredWidth() / maxTime;
         if (paint == null) {
             paint = new Paint();
             paint.setAntiAlias(true);
+            paint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 16, getResources().getDisplayMetrics()));
+            paint.setTextAlign(Paint.Align.LEFT);
         }
-        canvas = holder.lockCanvas(new Rect(0, 0, getWidth(), getHeight()));
-        drawBackGroud();
-        drawSeekLine(Color.rgb(246, 131, 126), startX);
-        holder.unlockCanvasAndPost(canvas);
-
-        if(drawThread == null)
+        if(deltTime == 0)
+            drawEmptyView();
+        if (drawThread == null)
             drawThread = new DrawThread(holder);
-        drawThread.start();
     }
 
     @Override
@@ -77,28 +80,23 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        resetWaveTimeView(false);
+        //resetWaveTimeView();
     }
 
-//    @Override
-//    protected void onDraw(Canvas canvas) {
-//        super.onDraw(canvas);
-//
-//        this.canvas = canvas;
-//        if(paint == null){
-//            paint = new Paint();
-//            paint.setAntiAlias(true);
-//        }
-//        drawBackGroud();
-//        drawSeekLine(Color.rgb(246, 131, 126), startX);
-//        //drawAudioWave(Color.rgb(131, 246, 146), startX, getMeasuredHeight() / 2);
-//    }
+    /**
+     * 设置指针固定位置
+     * 取值范围（0,1）
+     */
+    public void setEndPos(float x) {
+        endPos = getMeasuredWidth() > 0 ? getMeasuredWidth() * x : x;
+    }
 
     /**
      * 开始绘制
      */
     public void startDrawWave() {
         drawState = STATE_START;
+        drawThread.start();
     }
 
     /**
@@ -113,26 +111,31 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
      */
     public void stopDrawWave() {
         drawState = STATE_STOP;
+        if (drawThread != null) {
+            synchronized (drawThread) {
+                drawThread.notify();
+            }
+        }
     }
 
     /**
      * 重置视图
      */
-    public void resetWaveTimeView(boolean needRestart) {
-        stopDrawWave();
+    public void resetWaveTimeView() {
+        cursorX = 0;
+        oldX = 0;
+        startTime = 0;
+        passTime = 0;
+        post(new Runnable() {
+            @Override
+            public void run() {
+                if(drawingListener != null)
+                    drawingListener.onUpdateTime(deltTime = 0);
+            }
+        });
         drawState = STATE_PAUSE;
-        startX = 0;
         audioBuf.clear();
-        canvas = getHolder().lockCanvas();
-        if (canvas != null) {
-            //canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);// 清除画布
-            drawBackGroud();
-            drawSeekLine(Color.rgb(246, 131, 126), startX);
-            getHolder().unlockCanvasAndPost(canvas);
-        }
-        //invalidate();
-        if(needRestart && drawThread != null)
-            drawThread.start();
+        drawEmptyView();
     }
 
     public boolean isStart() {
@@ -143,32 +146,29 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
         return drawState == STATE_PAUSE;
     }
 
-    public void updateAudioBuf(byte[] buf) {
+    public void updateAudioBuf(short[] buf) {
         synchronized (audioBuf) {
             for (int i = 0; i < buf.length; i += 100) {
-                //tmp[i/100] = Byte.valueOf(buf[i]);
-                audioBuf.add(Byte.valueOf(buf[i]));
+                audioBuf.add(Short.valueOf(buf[i]));
             }
         }
-//        audioBuf = new ArrayList<>(Arrays.asList(tmp));
-        //audioBuf.addAll(Arrays.asList(tmp));
+        if (drawThread != null) {
+            synchronized (drawThread) {
+                drawThread.notify();
+            }
+        }
     }
 
-    /**
-     * 绘制背景
-     */
-    private void drawBackGroud() {
-        canvas.drawARGB(255, 239, 239, 239);
-        drawBaseLine(Color.rgb(169, 169, 169));
-        drawCenterLine(Color.rgb(39, 199, 175));
+    public void setDrawingListener(OnDrawingWaveListener listener){
+        drawingListener = listener;
     }
-
 
     /**
      * 绘制线程
      */
     private class DrawThread extends Thread {
         SurfaceHolder holder;
+        long duration = 0;
 
         public DrawThread(SurfaceHolder holder) {
             this.holder = holder;
@@ -176,61 +176,176 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
 
         @Override
         public void run() {
+            int waveStartPos = 0, sx = 0;
             while (drawState != STATE_STOP) {
-                if (startX < getMeasuredWidth() && drawState == STATE_START) {
+                if (cursorX < getMeasuredWidth() && drawState == STATE_START) {
+                    if (startTime == 0)
+                        startTime = System.currentTimeMillis();
+                    deltTime = (System.currentTimeMillis() - startTime) + passTime;
                     synchronized (audioBuf) {
-                        startX = audioBuf.size() * 0.2f;
+                        if (cursorX <= endPos)
+                            cursorX = audioBuf.size() * rateX;
+                        if (cursorX > oldX || audioBuf.size() * rateX > oldX) {
+                            canvas = holder.lockCanvas(new Rect(0, 0, getWidth(), getHeight()));
+                            drawBackGroud();
+                            if (cursorX <= endPos) {
+                                oldX = cursorX;
+                                drawTick(0, waveStartPos/*=0*/);
+                            } else {
+                                waveStartPos += audioBuf.size() - oldX / rateX;
+                                sx += audioBuf.size() * rateX - oldX;
+                                if (needTime ) {
+                                    if(sx > getWidth() / maxTime) {
+                                        sx = (int) (audioBuf.size() * rateX - oldX);
+                                        duration++;
+                                    }
+                                } else if (sx >= getWidth() / tickCount) {
+                                    sx = (int) (audioBuf.size() * rateX - oldX);
+                                }
+                                drawTick(duration, sx);
+                                oldX = audioBuf.size() * rateX;
+                            }
+                            drawSeekLine(seekColor, cursorX);
+                            drawAudioWave(waveColor, waveStartPos, (getHeight() + timeHeight) / 2);
+                            holder.unlockCanvasAndPost(canvas);
+                            canvas = null;
+
+                        }
                     }
-                    //Log.e("wave", "startx: " + startX + ", oldx: " + oldX);
-                    canvas = holder.lockCanvas(new Rect((int) (startX - line_off), 0, (int) (startX + line_off )/*getWidth()*/, getHeight()));
-                    drawBackGroud();
-                    drawSeekLine(Color.rgb(246, 131, 126), startX);
-                    drawAudioWave(Color.rgb(87, 146, 246), oldX - line_off, getHeight() / 2);
-                    oldX = startX;
-                    holder.unlockCanvasAndPost(canvas);
-//                    WavaTimeView.this.post(new Runnable() {
-//                        @Override
-//                        public void run() {
-//                            invalidate();
-//                        }
-//                    });
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if(drawingListener != null)
+                                drawingListener.onUpdateTime(deltTime);
+                        }
+                    });
                     try {
-                        Thread.sleep(10l);
+                        synchronized (this) {
+                            this.wait();
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                } else {
+                    if (startTime > 0) {
+                        passTime = System.currentTimeMillis() - startTime;
+                        startTime = 0;
+                    }
+                    try {
+                        synchronized (this) {
+                            this.wait();
+                        }
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
                 }
             }
+            resetWaveTimeView();
+            try {
+                if (canvas != null) {
+                    holder.unlockCanvasAndPost(canvas);
+                    canvas = null;
+                }
+            } catch (IllegalStateException se) {
+                se.printStackTrace();
+            } catch (IllegalArgumentException ae) {
+                ae.printStackTrace();
+            } catch (IllegalMonitorStateException me) {
+                me.printStackTrace();
+            }
+
         }
     }
 
+    /**
+     * 绘制空场景
+     */
+    private void drawEmptyView() {
+        canvas = getHolder().lockCanvas();
+        if (canvas != null) {
+            drawBackGroud();
+            drawTick(startTime, cursorX);
+            drawSeekLine(seekColor, cursorX);
+            getHolder().unlockCanvasAndPost(canvas);
+        }
+    }
+
+    /**
+     * 绘制背景
+     */
+    private void drawBackGroud() {
+        canvas.drawARGB(255, 255, 255, 255);
+        drawBaseLine(Color.rgb(169, 169, 169));
+        drawCenterLine(Color.rgb(39, 199, 175));
+    }
+
+    private void drawTick(long duration, float dx) {
+        paint.setColor(Color.BLACK);
+        long max = duration + maxTime + 1;
+        int i = 0;
+        if (needTime) {
+            for (long d = duration; d < max; d++) {
+                String time = DateUtils.formatElapsedTime(d);
+                float px = (i++ * timeWidth - dx);
+                canvas.drawText(time, px + 5, 50, paint);
+                canvas.drawLine(px, 0, px, line_off + timeHeight, paint);
+            }
+        } else {
+            drawTick(dx);
+        }
+    }
+
+    private void drawTick(float dx) {
+        for (int i = 0; i < tickCount + 1; i++) {
+            float x = i * getWidth() / tickCount - dx;
+            canvas.drawLine(x, timeHeight, x, timeHeight + line_off, paint);
+        }
+    }
+
+    /**
+     * 绘制基准线
+     */
     private void drawBaseLine(int color) {
         paint.setColor(color);
-        canvas.drawLine(0, line_off / 2, getMeasuredWidth(), line_off / 2, paint);
-        canvas.drawLine(0, getMeasuredHeight() - line_off / 2, getMeasuredWidth(), getMeasuredHeight() - line_off / 2, paint);
+        canvas.drawLine(0, line_off + timeHeight, getMeasuredWidth(), line_off + timeHeight, paint);
+        canvas.drawLine(0, getMeasuredHeight() - line_off, getMeasuredWidth(), getMeasuredHeight() - line_off, paint);
     }
 
+    /**
+     * 绘制中线
+     */
     private void drawCenterLine(int color) {
         paint.setColor(color);
-        canvas.drawLine(0, getMeasuredHeight() / 2, getMeasuredWidth(), getMeasuredHeight() / 2, paint);//中心线
+        canvas.drawLine(0, (getMeasuredHeight() + timeHeight) / 2, getMeasuredWidth(), (getMeasuredHeight() + timeHeight) / 2, paint);//中心线
     }
 
+    /**
+     * 绘制指针
+     */
     private void drawSeekLine(int color, float x) {
         paint.setColor(color);
-        canvas.drawCircle(x, line_off / 4, line_off / 4, paint);// 上面小圆
-        canvas.drawCircle(x, getMeasuredHeight() - line_off / 4, line_off / 4, paint);// 下面小圆
-        canvas.drawLine(x, 0, x, getMeasuredHeight(), paint);//垂直的线
+        canvas.drawCircle(x, line_off / 2 + timeHeight, line_off / 2, paint);// 上面小圆
+        canvas.drawCircle(x, getMeasuredHeight() - line_off / 2, line_off / 2, paint);// 下面小圆
+        canvas.drawLine(x, timeHeight, x, getMeasuredHeight(), paint);//垂直的线
     }
 
-    private void drawAudioWave(int color, float x, float y) {
+    /**
+     * 绘制波形
+     */
+    private void drawAudioWave(int color, float x, float maxY) {
         float sy, sx;
         paint.setColor(color);
-        for (int i = (int) (x <0 ? 0 : x); i < audioBuf.size(); i++) {
-            sy = audioBuf.get(i) * (y / 127f / 2) + y - line_off;
-            sx = i * 0.2f;
-            //Log.e("wave", "buf: " + audioBuf.get(i) + ", sx: " + sx + ", sy: " + sy + ", y: " + y);
-            canvas.drawLine(sx, sy, sx, y, paint);
+        ArrayList<Short> tmp;
+        tmp = new ArrayList<>(audioBuf.subList((int) x, audioBuf.size()));
+
+        for (int i = 0; i < tmp.size(); i++) {
+            sy = maxY - tmp.get(i) * ((maxY - timeHeight - line_off) / Short.MAX_VALUE);
+            sx = i * rateX;
+            canvas.drawLine(sx + line_off/2, sy, sx + line_off/2, getMeasuredHeight() + timeHeight - sy, paint);
         }
     }
 
+    public interface OnDrawingWaveListener {
+        void onUpdateTime(long deltaTime);
+    }
 }
