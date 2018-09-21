@@ -1,6 +1,7 @@
 package com.smg.audioeditor.utils;
 
 import android.media.AudioRecord;
+import android.media.MediaCodec;
 import android.media.MediaRecorder;
 import android.util.Log;
 
@@ -13,6 +14,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Executors;
 
 /**
@@ -309,8 +313,58 @@ public class AudioUtils {
         out.write(header, 0, 44);
     }
 
+    public void getAudioFromFile(String fileName){
+        new Thread(new PlayRunnable(fileName)).start();
+    }
+
+
+    private class PlayRunnable implements Runnable{
+        FileInputStream fis;
+        String filePath;
+        ArrayList<Short> audio = new ArrayList<>();
+        public PlayRunnable(String filePath) {
+            this.filePath = filePath;
+        }
+
+        @Override
+        public void run() {
+            if(fis == null){
+                try {
+                    fis = new FileInputStream(filePath);
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                }
+            }
+            byte[] buff = new byte[1024];
+            try {
+                while (fis.read(buff) > 0){
+                    int count = buff.length >> 1;
+                    short dest = 0;
+                    ArrayList<Short> audio = new ArrayList<>();
+                    for (int i = count - 1; i >=0 ; i--) {
+                        dest = (short) (buff[i*2] & 0x00ff);
+                        dest <<= 8;
+                        dest |= buff[i*2 +1] & 0x00ff;
+                        audio.add(dest);
+
+//                    dest[i] = (short) (waveform[i * 2] << 8 | waveform[2 * i] & 0x00ff);
+                    }
+                    if(recordListener != null)
+                        recordListener.onPlay(audio);
+                }
+                if(recordListener != null)
+                    recordListener.onStop();
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     public interface onRecordStateListener{
         void onRecording(short[] audioBuf);
         void onRecordStop(File rstFile);
+        void onPlay(List<Short> audioBuf);
+        void onStop();
     }
 }

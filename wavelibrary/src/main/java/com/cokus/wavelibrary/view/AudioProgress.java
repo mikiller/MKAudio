@@ -140,7 +140,7 @@ public class AudioProgress extends LinearLayout {
 
                 visualizer = new Visualizer(mp.getAudioSessionId());
                 visualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[1]);
-                visualizer.setDataCaptureListener(captureListener, Visualizer.getMaxCaptureRate() / 2, true, true);
+                visualizer.setDataCaptureListener(captureListener, Visualizer.getMaxCaptureRate() / 2, true, false);
             }
         });
         player.setOnErrorListener(new MediaPlayer.OnErrorListener() {
@@ -163,6 +163,7 @@ public class AudioProgress extends LinearLayout {
                 //player.reset();
             }
         });
+
 
 //        captureListener = new Visualizer.OnDataCaptureListener() {
 //            @Override

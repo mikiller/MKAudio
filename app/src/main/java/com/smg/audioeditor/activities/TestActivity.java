@@ -107,8 +107,10 @@ public class TestActivity extends BaseActivity {
         btn_play.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                pgs_audio.resetPlayer(tv_dirPath.getText().toString());
-                waveView.setEndPos(0.9f);
+                //pgs_audio.resetPlayer(tv_dirPath.getText().toString());
+                //waveView.setEndPos(0.9f);
+                audioUtils.getAudioFromFile(tv_dirPath.getText().toString());
+                waveView.startDrawWave();
             }
         });
 
@@ -156,17 +158,28 @@ public class TestActivity extends BaseActivity {
         pgs_audio.setVisualizerListener(new Visualizer.OnDataCaptureListener() {
             @Override
             public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
+                if(waveform == null)
+                    return;
+                int count = waveform.length >> 1;
+                short[] dest = new short[count];
+                for (int i = count - 1; i >=0 ; i--) {
+                    dest[i] = (short) (waveform[i*2] & 0x00ff);
+                    dest[i] <<= 8;
+                    dest[i] |= waveform[i*2 +1] & 0x00ff;
+//                    dest[i] = (short) (waveform[i * 2] << 8 | waveform[2 * i] & 0x00ff);
+                }
+                waveView.updateAudioBuf(dest);
             }
 
             @Override
             public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) {
                 //waveView.updateAudioBuf(fft);
-                int count = fft.length >> 1;
-                short[] dest = new short[count];
-                for (int i = 0; i < count; i++) {
-                    dest[i] = (short) (fft[i * 2] << 8 | fft[2 * i + 1] & 0xff);
-                }
-                waveView.updateAudioBuf(dest);
+//                int count = fft.length >> 1;
+//                short[] dest = new short[count];
+//                for (int i = 0; i < count; i++) {
+//                    dest[i] = (short) (fft[i * 2] << 8 | fft[2 * i + 1] & 0xff);
+//                }
+//                waveView.updateAudioBuf(dest);
             }
         });
 
@@ -192,21 +205,32 @@ public class TestActivity extends BaseActivity {
                     }
                 });
             }
+
+            @Override
+            public void onPlay(List<Short> audioBuf) {
+                waveView.setAudioBuf(audioBuf);
+            }
+
+            @Override
+            public void onStop() {
+                waveView.stopDrawWave();
+            }
         });
     }
 
     private void checkDirPath() {
         final File dir = new File(dirPath = Environment.getExternalStorageDirectory() + "/aa/");
         if (dir.exists()) {
-            List<File> files = Arrays.asList(dir.listFiles());
-            if (files != null) {
-                List<File> tmp = new ArrayList<>(files);
-                for (File file : files) {
-                    if (!file.getName().endsWith("wav"))
-                        tmp.remove(file);
-                }
-                adapter.setFileList(tmp);
-            }
+//            List<File> files = Arrays.asList(dir.listFiles());
+//            if (files != null) {
+//                List<File> tmp = new ArrayList<>(files);
+//                for (File file : files) {
+////                    if (!file.getName().endsWith("wav"))
+//                    if (!file.getName().endsWith("raw"))
+//                        tmp.remove(file);
+//                }
+//                adapter.setFileList(tmp);
+//            }
         } else {
             dir.mkdirs();
         }

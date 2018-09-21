@@ -13,6 +13,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback {
     private final int STATE_IDEL = -1, STATE_STOP = 0, STATE_START = 1, STATE_PAUSE = 2;
@@ -89,6 +90,7 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
      */
     public void setEndPos(float x) {
         endPos = getMeasuredWidth() > 0 ? getMeasuredWidth() * x : x;
+        audioBuf.clear();
     }
 
     /**
@@ -159,6 +161,17 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
         }
     }
 
+    public void setAudioBuf(List<Short> buf){
+        synchronized (audioBuf) {
+            audioBuf.addAll(buf);
+        }
+        if (drawThread != null) {
+            synchronized (drawThread) {
+                drawThread.notify();
+            }
+        }
+    }
+
     public void setDrawingListener(OnDrawingWaveListener listener){
         drawingListener = listener;
     }
@@ -178,7 +191,7 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
         public void run() {
             int waveStartPos = 0, sx = 0;
             while (drawState != STATE_STOP) {
-                if (cursorX < getMeasuredWidth() && drawState == STATE_START) {
+                if (/*cursorX < getMeasuredWidth() &&*/ drawState == STATE_START) {
                     if (startTime == 0)
                         startTime = System.currentTimeMillis();
                     deltTime = (System.currentTimeMillis() - startTime) + passTime;
@@ -341,7 +354,7 @@ public class WavaTimeView extends SurfaceView implements SurfaceHolder.Callback 
         for (int i = 0; i < tmp.size(); i++) {
             sy = maxY - tmp.get(i) * ((maxY - timeHeight - line_off) / Short.MAX_VALUE);
             sx = i * rateX;
-            canvas.drawLine(sx + line_off/2, sy, sx + line_off/2, getMeasuredHeight() + timeHeight - sy, paint);
+            canvas.drawLine(sx, sy, sx, getMeasuredHeight() + timeHeight - sy, paint);
         }
     }
 
